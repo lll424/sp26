@@ -66,7 +66,8 @@ std::list<Armor> Detector::detect(const cv::Mat & bgr_img, int frame_count)
   std::list<Armor> armors;
   for (auto left = lightbars.begin(); left != lightbars.end(); left++) {
     for (auto right = std::next(left); right != lightbars.end(); right++) {
-      if (left->color != right->color) continue;
+      // 允许微小曝光偏差下的灯条配对（避免因灯条中心过曝导致颜色误判而断开）
+      // if (left->color != right->color) continue;
 
       auto armor = Armor(*left, *right);
       if (!check_geometry(armor)) continue;
@@ -251,29 +252,13 @@ bool Detector::check_name(const Armor & armor) const
   auto name_ok = armor.name != ArmorName::not_armor;
   auto confidence_ok = armor.confidence > min_confidence_;
 
-  // 保存不确定的图案，用于分类器的迭代
-  if (name_ok && !confidence_ok) save(armor);
-
-  // 出现 5号 则显示 debug 信息。但不过滤。
-  if (armor.name == ArmorName::five) tools::logger()->debug("See pattern 5");
-
   return name_ok && confidence_ok;
 }
 
 bool Detector::check_type(const Armor & armor) const
 {
-  auto name_ok = armor.type == ArmorType::small
-                   ? (armor.name != ArmorName::one && armor.name != ArmorName::base)
-                   : (armor.name == ArmorName::one || armor.name == ArmorName::base);
-
-  // 保存异常的图案，用于分类器的迭代
-  if (!name_ok) {
-    tools::logger()->debug(
-      "see strange armor: {} {}", ARMOR_TYPES[armor.type], ARMOR_NAMES[armor.name]);
-    save(armor);
-  }
-
-  return name_ok;
+  // 允许所有装甲板组合，避免因长宽比或类型判断导致 3/4/5 号大装甲板被过滤
+  return true;
 }
 
 Color Detector::get_color(const cv::Mat & bgr_img, const std::vector<cv::Point> & contour) const

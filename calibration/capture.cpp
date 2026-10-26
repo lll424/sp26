@@ -27,7 +27,6 @@ void write_q(const std::string q_path, const Eigen::Quaterniond & q)
 void capture_loop(
   const std::string & config_path, const std::string & can, const std::string & output_folder)
 {
-  io::CBoard cboard(config_path);
   io::Camera camera(config_path);
   cv::Mat img;
   std::chrono::steady_clock::time_point timestamp;
@@ -35,21 +34,17 @@ void capture_loop(
   int count = 0;
   while (true) {
     camera.read(img, timestamp);
-    Eigen::Quaterniond q = cboard.imu_at(timestamp);
 
-    // 在图像上显示欧拉角，用来判断imuabs系的xyz正方向，同时判断imu是否存在零漂
     auto img_with_ypr = img.clone();
-    Eigen::Vector3d zyx = tools::eulers(q, 2, 1, 0) * 57.3;  // degree
-    tools::draw_text(img_with_ypr, fmt::format("Z {:.2f}", zyx[0]), {40, 40}, {0, 0, 255});
-    tools::draw_text(img_with_ypr, fmt::format("Y {:.2f}", zyx[1]), {40, 80}, {0, 0, 255});
-    tools::draw_text(img_with_ypr, fmt::format("X {:.2f}", zyx[2]), {40, 120}, {0, 0, 255});
 
     std::vector<cv::Point2f> centers_2d;
-    auto success = cv::findCirclesGrid(img, cv::Size(10, 7), centers_2d);  // 默认是对称圆点图案
+    int flags = cv::CALIB_CB_ADAPTIVE_THRESH | cv::CALIB_CB_FAST_CHECK | cv::CALIB_CB_NORMALIZE_IMAGE;
+    auto success = cv::findChessboardCorners(img, cv::Size(10, 7), centers_2d, flags);
+
     cv::drawChessboardCorners(img_with_ypr, cv::Size(10, 7), centers_2d, success);  // 显示识别结果
     cv::resize(img_with_ypr, img_with_ypr, {}, 0.5, 0.5);  // 显示时缩小图片尺寸
 
-    // 按“s”保存图片和对应四元数，按“q”退出程序
+    // 按“s”保存图片，按“q”退出程序
     cv::imshow("Press s to save, q to quit", img_with_ypr);
     auto key = cv::waitKey(1);
     if (key == 'q')
@@ -57,16 +52,14 @@ void capture_loop(
     else if (key != 's')
       continue;
 
-    // 保存图片和四元数
+    // 保存图片
     count++;
     auto img_path = fmt::format("{}/{}.jpg", output_folder, count);
-    auto q_path = fmt::format("{}/{}.txt", output_folder, count);
     cv::imwrite(img_path, img);
-    write_q(q_path, q);
     tools::logger()->info("[{}] Saved in {}", count, output_folder);
   }
 
-  // 离开该作用域时，camera和cboard会自动关闭
+  // 离开该作用域时，camera会自动关闭
 }
 
 int main(int argc, char * argv[])

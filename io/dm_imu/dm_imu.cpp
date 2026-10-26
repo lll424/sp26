@@ -17,10 +17,14 @@ namespace io
 DM_IMU::DM_IMU() : queue_(5000)
 {
   init_serial();
-  rec_thread_ = std::thread(&DM_IMU::get_imu_data_thread, this);
-  queue_.pop(data_ahead_);
-  queue_.pop(data_behind_);
-  tools::logger()->info("[DM_IMU] initialized");
+  if (serial_.isOpen()) {
+    rec_thread_ = std::thread(&DM_IMU::get_imu_data_thread, this);
+    queue_.pop(data_ahead_);
+    queue_.pop(data_behind_);
+    tools::logger()->info("[DM_IMU] initialized");
+  } else {
+    tools::logger()->warn("[DM_IMU] Running in fallback mode without hardware IMU.");
+  }
 }
 
 DM_IMU::~DM_IMU()
@@ -52,8 +56,7 @@ void DM_IMU::init_serial()
   }
 
   catch (serial::IOException & e) {
-    tools::logger()->warn("[DM_IMU] failed to open serial port ");
-    exit(0);
+    tools::logger()->warn("[DM_IMU] failed to open serial port (using Identity quaternion fallback)");
   }
 }
 
@@ -105,6 +108,10 @@ void DM_IMU::get_imu_data_thread()
 
 Eigen::Quaterniond DM_IMU::imu_at(std::chrono::steady_clock::time_point timestamp)
 {
+  if (!serial_.isOpen()) {
+    return Eigen::Quaterniond::Identity();
+  }
+
   if (data_behind_.timestamp < timestamp) data_ahead_ = data_behind_;
 
   while (true) {

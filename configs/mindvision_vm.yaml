@@ -1,0 +1,73 @@
+# 虚拟机 + 迈德威视相机 专用配置文件
+enemy_color: "red"
+
+#####-----神经网络参数-----#####
+yolo_name: yolov5
+classify_model: assets/tiny_resnet.onnx
+yolo11_model_path: assets/yolo11.xml
+yolov8_model_path: assets/yolov8.xml
+yolov5_model_path: assets/yolov5.xml
+device: CPU # 虚拟机中必须使用 CPU，不能使用 GPU
+min_confidence: 0.2
+use_traditional: true
+
+#####-----迈德威视工业相机参数-----#####
+camera_name: "mindvision"
+exposure_ms: 2.0
+gamma: 0.5
+vid_pid: "f622:d13a"
+
+#####-----ROI-----#####
+roi: 
+  x: 420
+  y: 50
+  width: 600
+  height: 600
+
+use_roi: false
+
+#####-----传统方法参数-----#####
+threshold: 150
+max_angle_error: 45
+min_lightbar_ratio: 1.5
+max_lightbar_ratio: 20
+min_lightbar_length: 8
+min_armor_ratio: 1
+max_armor_ratio: 5
+max_side_ratio: 2.5
+max_rectangular_error: 40
+min_confidence: 0.2
+
+#####-----cboard参数-----#####
+quaternion_canid: 0x01
+bullet_speed_canid: 0x110
+send_canid: 0xff
+can_interface: "can0"
+
+#####-----tracker参数-----#####
+min_detect_count: 5
+max_temp_lost_count: 15
+outpost_max_temp_lost_count: 75
+
+#####-----aimer参数-----#####
+yaw_offset: -1.0
+pitch_offset: -1.0
+comming_angle: 60
+leaving_angle: 20
+decision_speed: 8
+high_speed_delay_time: 0.030
+low_speed_delay_time: 0.015
+
+#####-----shooter参数-----#####
+first_tolerance: 3
+second_tolerance: 2
+judge_distance: 2
+auto_fire: true
+
+#####-----工业相机标定参数-----#####
+R_gimbal2imubody: [1, 0, 0, 0, 1, 0, 0, 0, 1]
+# 重投影误差: 1.0722px
+camera_matrix: [1759.9668956580801, 0, 593.85228404668942, 0, 1756.4389704737785, 426.44007295754557, 0, 0, 1]
+distort_coeffs: [-0.091522435204717187, 0.36890841474074043, -0.0054273750233815275, -0.011621938978761227, 0]
+R_camera2gimbal: [1, 0, 0, 0, 1, 0, 0, 0, 1]
+t_camera2gimbal: [0, 0, 0]

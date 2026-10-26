@@ -1,16 +1,20 @@
 pattern_cols: 10
 pattern_rows: 7
-center_distance_mm: 40
+center_distance_mm: 20
 
 R_gimbal2imubody: [1, 0, 0, 0, 1, 0,  0, 0, 1]
 
-camera_name: "hikrobot"
-exposure_ms: 3
-gain: 10.0
-vid_pid: "2bdf:0001"
+camera_name: "mindvision"
+exposure_ms: 2.0
+gamma: 0.5
+vid_pid: "f622:d13a"
 
 #####-----cboard参数-----#####
 quaternion_canid: 0x01
 bullet_speed_canid: 0x110
 send_canid: 0xff
 can_interface: "can0"
+
+# 重投影误差: 1.0722px
+camera_matrix: [1759.9668956580801, 0, 593.85228404668942, 0, 1756.4389704737785, 426.44007295754557, 0, 0, 1]
+distort_coeffs: [-0.091522435204717187, 0.36890841474074043, -0.0054273750233815275, -0.011621938978761227, 0]
