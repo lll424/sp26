@@ -219,6 +219,13 @@ void Target::update_ypda(const Armor & armor, int id)
   const Eigen::VectorXd & ypr = armor.ypr_in_world;
   Eigen::VectorXd z{{ypd[0], ypd[1], ypd[2], ypr[0]}};  //获得观测量
 
+  // 记录原始观测，供离线标定 R 使用
+  // 注意：这里必须是 z 本身，不能用 ekf_.x（已被滤波平滑，会低估噪声）
+  ekf_.data["z_yaw"] = z[0];
+  ekf_.data["z_pitch"] = z[1];
+  ekf_.data["z_dist"] = z[2];
+  ekf_.data["z_angle"] = z[3];
+
   ekf_.update(z, H, R, h, z_subtract);
 }
 
