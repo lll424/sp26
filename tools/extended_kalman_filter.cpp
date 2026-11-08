@@ -1,9 +1,22 @@
 #include "extended_kalman_filter.hpp"
 
+#include <cmath>
 #include <numeric>
 
 namespace tools
 {
+namespace
+{
+// 卡方分布的 95% 分位数（Wilson-Hilferty 近似，误差 < 0.5%）
+// NIS 的自由度 = 观测维数，NEES 的自由度 = 状态维数
+// 参考值：dof=4 -> 9.49，dof=11 -> 19.68
+double chi2_95(int dof)
+{
+  const double k = static_cast<double>(dof);
+  const double a = 2.0 / (9.0 * k);
+  return k * std::pow(1.0 - a + 1.6448536 * std::sqrt(a), 3.0);
+}
+}  // namespace
 ExtendedKalmanFilter::ExtendedKalmanFilter(
   const Eigen::VectorXd & x0, const Eigen::MatrixXd & P0,
   std::function<Eigen::VectorXd(const Eigen::VectorXd &, const Eigen::VectorXd &)> x_add)
@@ -62,9 +75,11 @@ Eigen::VectorXd ExtendedKalmanFilter::update(
   double nis = residual.transpose() * S.inverse() * residual;
   double nees = (x - x_prior).transpose() * P.inverse() * (x - x_prior);
 
-  // 卡方检验阈值（自由度=4，取置信水平95%）
-  constexpr double nis_threshold = 0.711;
-  constexpr double nees_threshold = 0.711;
+  // 卡方检验阈值：取 95% 置信水平，自由度由维度自动确定
+  // 原值 0.711 是 χ²(4) 的 5% 分位（查表时把下分位当成了上分位），
+  // 会导致 95% 的正常帧都被判为失败，监控数据没有意义
+  const double nis_threshold = chi2_95(static_cast<int>(z.rows()));
+  const double nees_threshold = chi2_95(static_cast<int>(x.rows()));
 
   if (nis > nis_threshold) nis_count_++, data["nis_fail"] = 1;
   if (nees > nees_threshold) nees_count_++, data["nees_fail"] = 1;

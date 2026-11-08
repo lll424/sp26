@@ -1,3 +1,7 @@
+# 当前硬件：MindVision MV-SUA134GC（USB3 全局快门彩色，1280x1024）
+# 镜头：MV-LD-8-4M-G（8mm F2.0，1/1.8" 画幅，水平 FOV 约 48°）
+# 说明：vid_pid 仅用于掉线时 reset USB（mindvision.cpp:149），不参与设备枚举，
+#       写错也能正常打开，只是失去自动恢复能力
 camera_name: "mindvision"
 exposure_ms: 2
 gamma: 0.5

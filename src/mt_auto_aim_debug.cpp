@@ -152,6 +152,15 @@ int main(int argc, char * argv[])
       data["nis_fail"] = target.ekf().data.at("nis_fail");
       data["nees_fail"] = target.ekf().data.at("nees_fail");
       data["recent_nis_failures"] = target.ekf().data.at("recent_nis_failures");
+
+      // 原始观测值，用于离线标定 R
+      // 建目标的当帧还没有产生观测，count() 为 0 时跳过
+      if (target.ekf().data.count("z_yaw")) {
+        data["z_yaw"] = target.ekf().data.at("z_yaw");
+        data["z_pitch"] = target.ekf().data.at("z_pitch");
+        data["z_dist"] = target.ekf().data.at("z_dist");
+        data["z_angle"] = target.ekf().data.at("z_angle");
+      }
     }
 
     // 云台响应情况
