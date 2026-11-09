@@ -55,7 +55,7 @@ min_confidence: 0.8
 quaternion_canid: 0x01
 bullet_speed_canid: 0x110
 send_canid: 0xff
-can_interface: "vcan0"
+can_interface: "can0"
 
 #####-----tracker参数-----#####
 min_detect_count: 5
