@@ -60,18 +60,21 @@ Eigen::VectorXd ExtendedKalmanFilter::update(
   std::function<Eigen::VectorXd(const Eigen::VectorXd &, const Eigen::VectorXd &)> z_subtract)
 {
   Eigen::VectorXd x_prior = x;
-  Eigen::MatrixXd K = P * H.transpose() * (H * P * H.transpose() + R).inverse();
+  Eigen::MatrixXd S_prior = H * P * H.transpose() + R;  // 先验创新协方差
+  Eigen::MatrixXd K = P * H.transpose() * S_prior.inverse();
+  Eigen::VectorXd residual_prior = z_subtract(z, h(x_prior));  // 先验残差，卡方检验唯一正确的输入
 
   // Stable Compution of the Posterior Covariance
   // https://github.com/rlabbe/Kalman-and-Bayesian-Filters-in-Python/blob/master/07-Kalman-Filter-Math.ipynb
   P = (I - K * H) * P * (I - K * H).transpose() + K * R * K.transpose();
 
-  x = x_add(x, K * z_subtract(z, h(x)));
+  x = x_add(x_prior, K * residual_prior);
 
   /// 卡方检验
-  Eigen::VectorXd residual = z_subtract(z, h(x));
-  // 新增检验
-  Eigen::MatrixXd S = H * P * H.transpose() + R;
+  // 必须用先验残差与先验创新协方差：若用后验量，残差已被卡尔曼增益吸收，
+  // nis 会系统性趋近 0（实测恒为 0.00），一致性检验彻底失效
+  Eigen::VectorXd residual = residual_prior;
+  Eigen::MatrixXd S = S_prior;
   double nis = residual.transpose() * S.inverse() * residual;
   double nees = (x - x_prior).transpose() * P.inverse() * (x - x_prior);
 

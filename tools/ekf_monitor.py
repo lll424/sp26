@@ -143,14 +143,15 @@ def plot_mode(rx, window):
 
     while True:
         with rx.lock:
-            for key in rx.keys:
-                vals = list(rx.series[key])[-window:]
+            snapshot = {key: list(rx.series[key])[-window:] for key in rx.keys}
         for key in rx.keys:
+            vals = snapshot[key]
             lines[key].set_ydata(vals)
             lines[key].set_xdata(range(len(vals)))
-            ax = lines[key].axes
-            ax.relim()
-            ax.autoscale_view()
+            if vals:                       # 空数据时保持上一个视图，避免坐标轴乱跳
+                ax = lines[key].axes
+                ax.relim()
+                ax.autoscale_view()
 
         stats = rx.nis_stats()
         with rx.lock:
