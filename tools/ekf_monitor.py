@@ -106,7 +106,12 @@ class Receiver:
         return n, mean, var ** 0.5, over
 
     def key_stats(self, key):
-        """单个字段的样本数、均值、标准差、最小最大值。"""
+        """单个字段的样本数、均值、标准差、最小最大值、以及相邻重复对数。
+
+        dup / pairs 是判断"同一帧被重复喂入"的关键指标：
+        真实相机即使 400fps，相邻帧也应有微小差异，重复率接近 0；
+        若重复率很高，说明取图线程在自由跑、把同一帧反复送进了 EKF。
+        """
         with self.lock:
             vals = list(self.series[key])
         if len(vals) < 2:
@@ -114,7 +119,8 @@ class Receiver:
         n = len(vals)
         mean = sum(vals) / n
         var = sum((v - mean) ** 2 for v in vals) / (n - 1)
-        return n, mean, var ** 0.5, min(vals), max(vals)
+        dup = sum(1 for i in range(1, n) if vals[i] == vals[i - 1])
+        return n, mean, var ** 0.5, min(vals), max(vals), dup, n - 1
 
 
 def terminal_mode(rx):
@@ -197,8 +203,8 @@ def stats_mode(rx, duration):
     print()
 
     print("\n=== 观测统计（%.1f s，总帧 %d）===" % (duration, rx.frame_count))
-    print("%-10s %7s %11s %10s %10s %13s" %
-          ("字段", "n", "均值", "σ", "峰峰值", "σ²(=R建议)"))
+    print("%-10s %7s %11s %10s %10s %13s %8s" %
+          ("字段", "n", "均值", "σ", "峰峰值", "σ²(=R建议)", "重复率"))
     r_map = {"z_yaw": "R_dig[0] yaw", "z_pitch": "R_dig[1] pitch",
              "z_dist": "R_dig[2] dist", "z_angle": "R_dig[3] angle"}
     for key in rx.keys:
@@ -206,16 +212,39 @@ def stats_mode(rx, duration):
         if st is None:
             print("%-10s  样本不足（该字段可能未出现）" % key)
             continue
-        n, mean, sd, lo, hi = st
-        print("%-10s %7d %11.5f %10.5f %10.5f %13.4e   %s" %
-              (key, n, mean, sd, hi - lo, sd * sd, r_map.get(key, "")))
+        n, mean, sd, lo, hi, dup, pairs = st
+        print("%-10s %7d %11.5f %10.5f %10.5f %13.4e %7.1f%%   %s" %
+              (key, n, mean, sd, hi - lo, sd * sd, 100.0 * dup / max(1, pairs),
+               r_map.get(key, "")))
+
+    # 先判断是否存在"同一帧重复喂入"，这会让 nis 失效，必须先排除
+    dup_flags = {}
+    for key in rx.keys:
+        st = rx.key_stats(key)
+        if st:
+            dup_flags[key] = 100.0 * st[5] / max(1, st[6])
+
+    print()
+    dup_detected = False
+    worst = [(k, v) for k, v in dup_flags.items()
+             if k.startswith("z_") and v > 10.0]
+    if worst:
+        dup_detected = True
+        print("!! 警告：以下观测字段相邻帧重复率异常高，说明同一帧被重复送入 EKF：")
+        for k, v in sorted(worst, key=lambda kv: -kv[1]):
+            print("     %-10s 重复率 %.1f%%" % (k, v))
+        print("   → 此时 nis 会被压到接近 0，读数不可用。")
+        print("   → 先修取图/主循环帧率，再回来标 R。")
+        print()
 
     stats = rx.nis_stats(window=0)
     if stats:
         n, mean, sd, over = stats
         print("\nnis: 均值 %.2f（理论 4.00）  标准差 %.2f  超 χ²(4)95%% 阈值 %d/%d 帧"
               % (mean, sd, over, n))
-        if mean > 6:
+        if dup_detected:
+            print("  → 存在重复帧，nis 不反映真实的一致性，本节结论作废")
+        elif mean > 6:
             print("  → nis 明显偏大：滤波器过度自信，R 或 Q 偏小")
         elif mean < 2:
             print("  → nis 偏小：R 给得偏大（对观测过于不信任）")
