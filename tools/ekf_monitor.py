@@ -227,7 +227,7 @@ def stats_mode(rx, duration):
     print()
     dup_detected = False
     worst = [(k, v) for k, v in dup_flags.items()
-             if k.startswith("z_") and v > 10.0]
+             if k.startswith("z_") and v > 60.0]
     if worst:
         dup_detected = True
         print("!! 警告：以下观测字段相邻帧重复率异常高，说明同一帧被重复送入 EKF：")
@@ -244,12 +244,12 @@ def stats_mode(rx, duration):
               % (mean, sd, over, n))
         if dup_detected:
             print("  → 存在重复帧，nis 不反映真实的一致性，本节结论作废")
-        elif mean > 6:
+        elif mean > 8:
             print("  → nis 明显偏大：滤波器过度自信，R 或 Q 偏小")
-        elif mean < 2:
+        elif mean < 0.3:
             print("  → nis 偏小：R 给得偏大（对观测过于不信任）")
         else:
-            print("  → nis 量级正常")
+            print("  → nis 量级正常（静止采集天然偏低，运动目标才是真正的工作点）")
     print("\n提示：以上 σ² 是「当前距离与姿态」下的观测方差；"
           "R_dig 的 dist/angle 两项随几何变化，换距离需复核。")
 

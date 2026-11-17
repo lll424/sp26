@@ -188,12 +188,16 @@ void Target::update_ypda(const Armor & armor, int id)
 {
   //观测jacobi
   Eigen::MatrixXd H = h_jacobian(ekf_.x, id);
-  // Eigen::VectorXd R_dig{{4e-3, 4e-3, 1, 9e-2}};
-  auto center_yaw = std::atan2(armor.xyz_in_world[1], armor.xyz_in_world[0]);
-  auto delta_angle = tools::limit_rad(armor.ypr_in_world[0] - center_yaw);
-  Eigen::VectorXd R_dig{
-    {4e-3, 4e-3, log(std::abs(delta_angle) + 1) + 1,
-     log(std::abs(armor.ypd_in_world[2]) + 1) / 200 + 9e-2}};
+
+  // R 由 2026-11-17 静止实测标定（目标 2.06m、正对、30s/10s 两次一致）
+  // 实测噪声 σ：yaw 1.9e-4 rad(0.32px)、pitch 3.2e-4 rad、dist 1.1e-2 m、angle 5.2e-2 rad
+  // 取 R = k·σ²，k≈5~10，留出标定残差 / 3D 模型误差的余量（系统偏差不会被平均掉）
+  //   1e-6   → σ=1.0e-3 rad ≈ 1.8px（yaw/pitch）
+  //   1e-3   → σ=3.2e-2 m
+  //   6e-3   → σ=7.7e-2 rad ≈ 4.4°（装甲板转角，平面 PnP 本身很弱）
+  // 旧值（换相机前）：{4e-3, 4e-3, log(|delta_angle|+1)+1, log(dist+1)/200+9e-2}
+  // 旧值等效 σ_yaw=3.6°、σ_dist≈1m，观测基本不参与滤波，换了高焦距相机后必须收紧
+  Eigen::VectorXd R_dig{{1e-6, 1e-6, 1e-3, 6e-3}};
 
   //测量过程噪声偏差的方差
   Eigen::MatrixXd R = R_dig.asDiagonal();
