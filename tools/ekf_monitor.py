@@ -26,6 +26,8 @@
     python3 tools/ekf_monitor.py                          # 默认: nis x y z r
     python3 tools/ekf_monitor.py --keys nis,w,a,r        # 测转速跟踪
     python3 tools/ekf_monitor.py --keys z_dist,x,y       # 看原始观测
+    python3 tools/ekf_monitor.py --stats 30 \\
+        --keys z_yaw,z_pitch,z_dist,z_angle,nis          # 静止采 30s，直接出 R 建议值
 """
 
 import argparse
@@ -90,9 +92,11 @@ class Receiver:
         t = threading.Thread(target=worker, daemon=True)
         t.start()
 
-    def nis_stats(self):
+    def nis_stats(self, window=STATS_WINDOW):
+        """window 为 0 时用全部样本（统计模式），否则取最近 window 帧（实时模式）。"""
         with self.lock:
-            vals = list(self.nis_hist)[-STATS_WINDOW:]
+            hist = list(self.nis_hist)
+        vals = hist[-window:] if window > 0 else hist
         if not vals:
             return None
         n = len(vals)
@@ -100,6 +104,17 @@ class Receiver:
         var = sum((v - mean) ** 2 for v in vals) / max(1, n - 1)
         over = sum(1 for v in vals if v > 9.488)  # chi2(4) 95%
         return n, mean, var ** 0.5, over
+
+    def key_stats(self, key):
+        """单个字段的样本数、均值、标准差、最小最大值。"""
+        with self.lock:
+            vals = list(self.series[key])
+        if len(vals) < 2:
+            return None
+        n = len(vals)
+        mean = sum(vals) / n
+        var = sum((v - mean) ** 2 for v in vals) / (n - 1)
+        return n, mean, var ** 0.5, min(vals), max(vals)
 
 
 def terminal_mode(rx):
@@ -170,6 +185,46 @@ def plot_mode(rx, window):
         time.sleep(0.2)
 
 
+def stats_mode(rx, duration):
+    """采集固定时长后打印各字段的均值/标准差/峰峰值，并给出 R_dig 建议方差。
+
+    目标静止时，观测值的波动即纯观测噪声，因此 σ² 可直接作为对应 R 分量。
+    """
+    print("[ekf_monitor] 统计模式：采集 %.1f 秒，保持目标静止..." % duration)
+    for remain in range(int(duration), 0, -1):
+        time.sleep(1.0)
+        print("  剩余 %2d s   已收 %d 帧" % (remain - 1, rx.frame_count), end="\r")
+    print()
+
+    print("\n=== 观测统计（%.1f s，总帧 %d）===" % (duration, rx.frame_count))
+    print("%-10s %7s %11s %10s %10s %13s" %
+          ("字段", "n", "均值", "σ", "峰峰值", "σ²(=R建议)"))
+    r_map = {"z_yaw": "R_dig[0] yaw", "z_pitch": "R_dig[1] pitch",
+             "z_dist": "R_dig[2] dist", "z_angle": "R_dig[3] angle"}
+    for key in rx.keys:
+        st = rx.key_stats(key)
+        if st is None:
+            print("%-10s  样本不足（该字段可能未出现）" % key)
+            continue
+        n, mean, sd, lo, hi = st
+        print("%-10s %7d %11.5f %10.5f %10.5f %13.4e   %s" %
+              (key, n, mean, sd, hi - lo, sd * sd, r_map.get(key, "")))
+
+    stats = rx.nis_stats(window=0)
+    if stats:
+        n, mean, sd, over = stats
+        print("\nnis: 均值 %.2f（理论 4.00）  标准差 %.2f  超 χ²(4)95%% 阈值 %d/%d 帧"
+              % (mean, sd, over, n))
+        if mean > 6:
+            print("  → nis 明显偏大：滤波器过度自信，R 或 Q 偏小")
+        elif mean < 2:
+            print("  → nis 偏小：R 给得偏大（对观测过于不信任）")
+        else:
+            print("  → nis 量级正常")
+    print("\n提示：以上 σ² 是「当前距离与姿态」下的观测方差；"
+          "R_dig 的 dist/angle 两项随几何变化，换距离需复核。")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="EKF 实时监视器：接收 Plotter 的 UDP 数据流",
@@ -179,12 +234,16 @@ def main():
                         help="要画的字段，逗号分隔")
     parser.add_argument("--window", type=int, default=600,
                         help="曲线显示的帧数窗口")
+    parser.add_argument("--stats", type=float, default=0,
+                        help="采集 N 秒后打印统计并退出（用于标定 R）；0 表示持续绘图")
     args = parser.parse_args()
 
     rx = Receiver(args.port, args.keys)
     rx.start()
     print("[ekf_monitor] 监听 127.0.0.1:%d，字段: %s" % (args.port, args.keys))
-    if not HAS_MPL:
+    if args.stats > 0:
+        stats_mode(rx, args.stats)
+    elif not HAS_MPL:
         terminal_mode(rx)
     else:
         try:
