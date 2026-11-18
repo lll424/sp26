@@ -52,6 +52,12 @@ min_detect_count: 5
 max_temp_lost_count: 15
 outpost_max_temp_lost_count: 75
 
+# 单板联调模式：测试架上只有 1 块装甲板时打开。
+# 4 板模型会预测出 3 块幻影板，且装甲板 id 会在 0~3 之间乱跳（jumped 恒为真），
+# 转角 a 被反复拽动，w 完全不可信。开启后按 1 块板建模，
+# 预测的装甲板位置和实物一一对应。上车务必改回 false。
+single_armor_test: true
+
 #####-----aimer参数-----#####
 yaw_offset: -1.0
 pitch_offset: -1.0

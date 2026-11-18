@@ -24,6 +24,10 @@ Tracker::Tracker(const std::string & config_path, Solver & solver)
   max_temp_lost_count_ = yaml["max_temp_lost_count"].as<int>();
   outpost_max_temp_lost_count_ = yaml["outpost_max_temp_lost_count"].as<int>();
   normal_temp_lost_count_ = max_temp_lost_count_;
+  // 单板调试模式（可选配置，缺省关闭）
+  // 用途：测试环境只有 1 块装甲板时，4 板模型会预测出 3 块幻影板，
+  // 且 id 会在 0~3 之间乱跳（jumped 恒为真），a 被来回拽，w 完全不可信。
+  single_armor_test_ = yaml["single_armor_test"] ? yaml["single_armor_test"].as<bool>() : false;
 }
 
 std::string Tracker::state() const { return state_; }
@@ -268,7 +272,9 @@ bool Tracker::set_target(std::list<Armor> & armors, std::chrono::steady_clock::t
     // 0.19 和 0.30 在观测上完全等价，滤波器没有绝对参照去发现错误。
     // 结论：几何量信卷尺，不要信静止状态下的估计值。
     Eigen::VectorXd P0_dig{{1, 64, 1, 64, 1, 64, 0.4, 100, 1e-4, 1, 1}};
-    target_ = Target(armor, t, 0.3, 4, P0_dig);
+    target_ = Target(armor, t, 0.3, single_armor_test_ ? 1 : 4, P0_dig);
+    if (single_armor_test_)
+      tools::logger()->warn("[Tracker] single_armor_test 开启：按 1 块装甲板建模（仅供联调）");
   }
 
   return true;

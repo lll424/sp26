@@ -38,6 +38,7 @@ private:
   int temp_lost_count_;
   int outpost_max_temp_lost_count_;
   int normal_temp_lost_count_;
+  bool single_armor_test_;  // 调试：目标只有 1 块装甲板时，把模型按 1 板建模
   std::string state_, pre_state_;
   Target target_;
   std::chrono::steady_clock::time_point last_timestamp_;
