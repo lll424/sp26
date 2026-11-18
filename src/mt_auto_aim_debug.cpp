@@ -115,6 +115,9 @@ int main(int argc, char * argv[])
       data["armor_y"] = armor.xyz_in_world[1];
       data["armor_yaw"] = armor.ypr_in_world[0] * 57.3;
       data["armor_yaw_raw"] = armor.yaw_raw * 57.3;
+      // 分类结果，用于排查"name/type 帧间跳变导致 tracker 匹配失败 → 掉 lost"
+      data["armor_name"] = static_cast<int>(armor.name);
+      data["armor_type"] = static_cast<int>(armor.type);
     }
 
     if (!targets.empty()) {
