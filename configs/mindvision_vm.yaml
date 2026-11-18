@@ -13,7 +13,10 @@ use_traditional: true
 
 #####-----迈德威视工业相机参数-----#####
 camera_name: "mindvision"
-exposure_ms: 2.0
+# 2026-11-18: 2.0 -> 3.0，远距离下检测抖动明显，加曝光提升信噪比
+# 注意：真机 sentry.yaml 用的是 0.8ms（为了压住旋转拖影），
+# 这里越亮，标出来的 R 相对真机就越偏小。R 定稿前建议回到 0.8~2.0 复核一次。
+exposure_ms: 3.0
 gamma: 0.5
 vid_pid: "f622:d13a"
 
