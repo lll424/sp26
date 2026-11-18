@@ -90,6 +90,17 @@ int main(int argc, char * argv[])
 
     // 装甲板原始观测数据
     data["armor_num"] = armors.size();
+
+    // tracker 状态机状态，用于量化"丢目标时间占比"
+    // 0=lost 1=detecting 2=temp_lost 3=tracking
+    // 均值接近 3 说明一直有目标；均值接近 0 说明长期丢目标
+    {
+      const auto st = tracker.state();
+      data["state"] = st == "tracking"     ? 3
+                      : st == "temp_lost"  ? 2
+                      : st == "detecting"  ? 1
+                                           : 0;
+    }
     if (!armors.empty()) {
       auto min_x = 1e10;
       auto & armor = armors.front();
