@@ -161,6 +161,9 @@ int main(int argc, char * argv[])
         data["z_dist"] = target.ekf().data.at("z_dist");
         data["z_angle"] = target.ekf().data.at("z_angle");
       }
+
+      // 实际预测步长，用于核对 Q 的标定条件（Q 与 dt 强耦合）
+      if (target.ekf().data.count("dt")) data["dt"] = target.ekf().data.at("dt");
     }
 
     // 云台响应情况

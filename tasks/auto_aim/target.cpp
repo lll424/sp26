@@ -133,6 +133,11 @@ void Target::predict(double dt)
     this->ekf_.x[7] = this->ekf_.x[7] > 0 ? 2.51 : -2.51;
 
   ekf_.predict(F, Q, f);
+
+  // 暴露实际预测步长，用于核对 Q 的标定条件
+  // Q 是 Piecewise White Noise 模型：Q_ww = dt²·v2，每秒累积方差 = dt·v2，
+  // 因此同一组 v1/v2 在不同帧率下的表现完全不同，标定 Q 时必须知道 dt
+  ekf_.data["dt"] = dt;
 }
 
 void Target::update(const Armor & armor)

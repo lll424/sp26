@@ -17,7 +17,8 @@
          nis nees nis_fail nees_fail recent_nis_failures
   观测   z_yaw z_pitch z_dist z_angle（建目标后才有）
   其他   armor_num armor_x armor_y armor_yaw armor_yaw_raw
-         gimbal_yaw gimbal_pitch bullet_speed t
+         gimbal_yaw gimbal_pitch bullet_speed t dt
+         （dt = EKF 实际预测步长，Q 与它强耦合，标定 Q 前先看这个）
 
 依赖：matplotlib（可选）。没装时自动降级为终端统计模式：
     sudo apt install python3-matplotlib   # 或 pip3 install matplotlib
