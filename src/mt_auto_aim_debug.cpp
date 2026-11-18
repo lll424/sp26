@@ -86,6 +86,7 @@ int main(int argc, char * argv[])
     tools::draw_text(img, fmt::format("[{}]", tracker.state()), {10, 30}, {255, 255, 255});
 
     nlohmann::json data;
+    data["src"] = 1;  // 1 = 主循环（本处），2 = CommandGener 线程
     data["t"] = tools::delta_time(std::chrono::steady_clock::now(), t0);
 
     // 装甲板原始观测数据

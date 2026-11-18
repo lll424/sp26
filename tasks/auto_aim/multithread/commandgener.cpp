@@ -57,7 +57,10 @@ void CommandGener::generate_command()
       cboard_.send(command);
       if (debug_) {
         nlohmann::json data;
-        data["t"] = tools::delta_time(std::chrono::steady_clock::now(), t0);
+        // 注意：这里不要用 "t"！主循环也往 9870 发一帧数据且用了 "t"（含义是单圈耗时），
+        // 本线程的 t 是"线程启动至今的秒数"，两者混在一起会让监视器读到无意义的均值。
+        data["src"] = 2;  // 1 = 主循环，2 = 本线程
+        data["cmd_t"] = tools::delta_time(std::chrono::steady_clock::now(), t0);
         data["cmd_yaw"] = command.yaw * 57.3;
         data["cmd_pitch"] = command.pitch * 57.3;
         data["shoot"] = command.shoot;

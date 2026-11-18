@@ -57,6 +57,7 @@ class Receiver:
         self.latest = {}
         self.series = {k: deque(maxlen=3000) for k in self.keys}
         self.nis_hist = deque(maxlen=3000)
+        self.src_count = Counter()   # 每个发送源的帧数（1=主循环 2=CommandGener）
         self.lock = threading.Lock()
         self.frame_count = 0
 
@@ -79,6 +80,11 @@ class Receiver:
                 with self.lock:
                     self.frame_count += 1
                     self.latest = data
+                    if "src" in data:
+                        try:
+                            self.src_count[int(data["src"])] += 1
+                        except (TypeError, ValueError):
+                            pass
                     for k in self.keys:
                         if k in data:
                             try:
@@ -205,6 +211,15 @@ def stats_mode(rx, duration):
     print()
 
     print("\n=== 观测统计（%.1f s，总帧 %d）===" % (duration, rx.frame_count))
+    with rx.lock:
+        src = dict(rx.src_count)
+    if src:
+        names = {1: "主循环", 2: "CommandGener"}
+        print("数据来源：" + "   ".join(
+            "%s %d 帧（%.1f Hz）" % (names.get(k, str(k)), c, c / duration)
+            for k, c in sorted(src.items())))
+        if len(src) > 1:
+            print("  注意：本表只统计含该字段的帧，CommandGener 的帧不含状态量，不参与统计")
     print("%-10s %7s %11s %10s %10s %13s %8s" %
           ("字段", "n", "均值", "σ", "峰峰值", "σ²(=R建议)", "重复率"))
     r_map = {"z_yaw": "R_dig[0] yaw", "z_pitch": "R_dig[1] pitch",
