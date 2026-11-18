@@ -38,7 +38,7 @@ import socket
 import sys
 import threading
 import time
-from collections import deque
+from collections import Counter, deque
 
 try:
     import matplotlib.pyplot as plt
@@ -227,6 +227,20 @@ def stats_mode(rx, duration):
             dup_flags[key] = 100.0 * st[5] / max(1, st[6])
 
     print()
+    if "state" in rx.keys:
+        with rx.lock:
+            st_vals = list(rx.series["state"])
+        if st_vals:
+            n = len(st_vals)
+            names = {0: "lost", 1: "detecting", 2: "temp_lost", 3: "tracking"}
+            dist = Counter(int(v) for v in st_vals)
+            print("tracker 状态分布：" + "   ".join(
+                "%s %.1f%%" % (names.get(k, str(k)), 100.0 * c / n)
+                for k, c in sorted(dist.items())))
+            kept = 100.0 * (dist.get(2, 0) + dist.get(3, 0)) / n
+            print("  → 跟住率 %.1f%%（temp_lost+tracking 占比）" % kept)
+            print()
+
     dup_detected = False
     worst = [(k, v) for k, v in dup_flags.items()
              if k.startswith("z_") and v > 60.0]
