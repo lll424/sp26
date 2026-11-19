@@ -200,6 +200,22 @@ void Solver::optimize_yaw(Armor & armor) const
   constexpr double SEARCH_RANGE = 140;  // degree
   auto yaw0 = tools::limit_rad(gimbal_ypr[0] - SEARCH_RANGE / 2 * CV_PI / 180.0);
 
+  // ---------------------------------------------------------------------------
+  // 平面 PnP 的 yaw 天然有二义性：装甲板正对时，绕板面法线转 +θ 和 -θ
+  // 重投影误差几乎相同（只在透视畸变上差一点点）。噪声一推，全局最小就会
+  // 从一支跳到另一支，实测 residual_angle 单帧跳 141°（峰峰值 2.469 rad），
+  // 把 EKF 的 a、w 反复拽动，nis 均值从 1.2 涨到 7.8。
+  //
+  // 治法是：
+  //   全局粗搜（1° 步长）拿到误差最小的解 → 如果它相对上一帧跳变超过 3°，
+  //   再到"上一帧 yaw 附近 ±8°"做一次细搜。只有当全局解比连续解明显更好
+  //   （省 HYSTERESIS_PX 以上）时才接受换支，否则留在连续分支上。
+  //   这就是迟滞：临界点上不会逐帧来回跳。
+  // ---------------------------------------------------------------------------
+
+  constexpr double HYSTERESIS_PX = 1.5;  // 新解必须省这么多像素才允许换支
+  // 判据用"平均每点像素误差"，所以这个阈值不随装甲板大小漂移
+
   auto min_error = 1e10;
   auto best_yaw = armor.ypr_in_world[0];
 
@@ -212,6 +228,34 @@ void Solver::optimize_yaw(Armor & armor) const
       best_yaw = yaw;
     }
   }
+  min_error /= 4.0;  // 4 个角点求和 → 换成平均误差
+
+  // 迟滞：若上一帧有可靠 yaw，且新解优势不足，则优先保住上一帧分支附近的解。
+  // last_yaw 是 Solver 自己缓存的（不用 armor 字段，避免观测阶段反复写）。
+  if (has_last_yaw_) {
+    auto jump = std::abs(tools::limit_rad(best_yaw - last_yaw_));
+    // 在上一帧 yaw 附近 ±8° 内再搜一遍，拿"连续解"的误差
+    auto near_min_error = 1e10;
+    auto near_yaw = last_yaw_;
+    constexpr double NEAR_RANGE = 8;  // degree
+    for (int i = -NEAR_RANGE; i <= NEAR_RANGE; i++) {
+      double yaw = tools::limit_rad(last_yaw_ + i * CV_PI / 180.0);
+      auto error = armor_reprojection_error(armor, yaw, i * CV_PI / 180.0);
+      if (error < near_min_error) {
+        near_min_error = error;
+        near_yaw = yaw;
+      }
+    }
+    near_min_error /= 4.0;
+    // 新解要"平均每点好出 HYS 像素"才允许切换；否则留在连续分支
+    // 但对小角度跳变（<3°）不加惩罚，正常跟踪时本来就该动
+    if (jump > 3.0 * CV_PI / 180.0 && min_error + HYSTERESIS_PX > near_min_error) {
+      best_yaw = near_yaw;
+    }
+  }
+
+  last_yaw_ = best_yaw;
+  has_last_yaw_ = true;
 
   armor.yaw_raw = armor.ypr_in_world[0];
   armor.ypr_in_world[0] = best_yaw;

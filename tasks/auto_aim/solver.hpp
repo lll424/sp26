@@ -35,6 +35,11 @@ private:
   Eigen::Vector3d t_camera2gimbal_;
   Eigen::Matrix3d R_gimbal2world_;
 
+  // optimize_yaw 的跨帧记忆：用于抑制平面 PnP 的 yaw 二义性跳支。
+  // 观测阶段（solve 被 const 调用）需要写它，所以标 mutable。
+  mutable bool has_last_yaw_ = false;
+  mutable double last_yaw_ = 0.0;
+
   void optimize_yaw(Armor & armor) const;
 
   double armor_reprojection_error(const Armor & armor, double yaw, const double & inclined) const;

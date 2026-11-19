@@ -205,12 +205,18 @@ void Target::update_ypda(const Armor & armor, int id)
   // R 由 2026-11-17 静止实测标定（目标 2.06m、正对、30s/10s 两次一致）
   // 实测噪声 σ：yaw 1.9e-4 rad(0.32px)、pitch 3.2e-4 rad、dist 1.1e-2 m、angle 5.2e-2 rad
   // 取 R = k·σ²，k≈5~10，留出标定残差 / 3D 模型误差的余量（系统偏差不会被平均掉）
-  //   1e-6   → σ=1.0e-3 rad ≈ 1.8px（yaw/pitch）
+  //   3e-6   → σ=1.7e-3 rad ≈ 3.1px（yaw，2026-11-19 由 1e-6 放宽）
+  //   1e-6   → σ=1.0e-3 rad ≈ 1.8px（pitch）
   //   1e-3   → σ=3.2e-2 m
   //   6e-3   → σ=7.7e-2 rad ≈ 4.4°（装甲板转角，平面 PnP 本身很弱）
   // 旧值（换相机前）：{4e-3, 4e-3, log(|delta_angle|+1)+1, log(dist+1)/200+9e-2}
   // 旧值等效 σ_yaw=3.6°、σ_dist≈1m，观测基本不参与滤波，换了高焦距相机后必须收紧
-  Eigen::VectorXd R_dig{{1e-6, 1e-6, 1e-3, 6e-3}};
+  //
+  // 2026-11-19 R_dig[0] 1e-6 → 3e-6 的依据：
+  //   摆动测试 residual_yaw 实测 σ=0.00175 rad，是原设定 σ=1.0e-3 的 1.75 倍。
+  //   R 偏紧会让滤波器把 yaw 观测当"真值"，nis 冲高（实测均值 7.8 / 峰值 361）。
+  //   σ 放 1.75 倍即 R 放 1.75²≈3 倍。只动 yaw，pitch 实测 σ=0.00057 仍然贴合 1e-3，不动。
+  Eigen::VectorXd R_dig{{3e-6, 1e-6, 1e-3, 6e-3}};
 
   //测量过程噪声偏差的方差
   Eigen::MatrixXd R = R_dig.asDiagonal();
