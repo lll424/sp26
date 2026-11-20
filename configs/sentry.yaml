@@ -9,6 +9,11 @@ yolo11_model_path: assets/yolo11.xml
 yolov8_model_path: assets/yolov8.xml
 yolov5_model_path: assets/yolov5.xml
 device: GPU
+# 注意：这个值同时控制两条检测通道，改一处即可：
+#   - YOLO 通道（yolos/yolov5.cpp:198）过滤的是检测框 score
+#   - 传统方法通道（detector.cpp:253）过滤的是 tiny_resnet 分类置信度
+# 原文件在"传统方法参数"段也写了一份同名 key，但两个检测器都读 yaml["min_confidence"]，
+# 重复 key 只会有一个生效，改了一份另一份白改。2026-11-20 已删除重复项。
 min_confidence: 0.8
 use_traditional: true
 
@@ -49,7 +54,7 @@ min_armor_ratio: 1
 max_armor_ratio: 5
 max_side_ratio: 1.5
 max_rectangular_error: 25 # degree
-min_confidence: 0.8
+# min_confidence 已上移到"神经网络参数"段，全文件只保留一处（见该处注释）
 
 #####-----cboard参数-----#####
 quaternion_canid: 0x01
