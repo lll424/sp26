@@ -2,6 +2,7 @@
 
 #include <yaml-cpp/yaml.h>
 
+#include <algorithm>
 #include <cmath>
 #include <vector>
 
@@ -36,6 +37,26 @@ io::Command Aimer::aim(
   if (targets.empty()) return {false, false, 0, 0};
   auto target = targets.front();
 
+  // 高度锚点：在【任何 predict 之前】记下中心高度（2026-11-21）
+  // 装甲板高度在实战中几乎不变（车不跳、不平地上下），所以 vz 的非零值
+  // 基本都是观测噪声（装甲板只有 56mm 高，垂直方向像素少）。
+  // 一旦允许 predict 用 vz 推高度，会形成正反馈：
+  //   z 偏 -> pitch 变大 -> fly_time 变长 -> 下一次 predict 的 dt 更大 -> z 更偏
+  // 实测 aim_z 的 sigma 只有 1cm，峰峰值却有 38cm，而 EKF 的 z 只跳 1mm。
+  // 所以瞄准点的高度一律钳在锚点附近（容差覆盖 h 的几十毫米偏移）。
+  const double z_anchor = target.ekf_x()[4];
+  // 容差要按 h 的实际估计自适应：1/3 号板的 z 本来就等于 中心 + h，
+  // 固定用一个大容差会漏掉真正该钳的漂移，固定用小容差又会削掉合法的 h。
+  const double h_est = std::abs(target.ekf_x()[10]);
+  const double MAX_Z_DEV = std::max(0.05, h_est + 0.02);  // 至少 5cm，再给 h 留 2cm 余量
+  auto clamp_z = [&](AimPoint & ap) {
+    if (!ap.valid) return;
+    double dz = ap.xyza[2] - z_anchor;
+    if (std::abs(dz) > MAX_Z_DEV) {
+      ap.xyza[2] = z_anchor + (dz > 0 ? MAX_Z_DEV : -MAX_Z_DEV);
+    }
+  };
+
   auto ekf = target.ekf();
   double delay_time =
     target.ekf_x()[7] > decision_speed_ ? high_speed_delay_time_ : low_speed_delay_time_;
@@ -59,6 +80,7 @@ io::Command Aimer::aim(
   }
 
   auto aim_point0 = choose_aim_point(target);
+  clamp_z(aim_point0);
   debug_aim_point = aim_point0;
   if (!aim_point0.valid) {
     // tools::logger()->debug("Invalid aim_point0.");
@@ -88,6 +110,7 @@ io::Command Aimer::aim(
 
     // 计算瞄准点
     auto aim_point = choose_aim_point(iteration_target[iter]);
+    clamp_z(aim_point);
     debug_aim_point = aim_point;
     if (!aim_point.valid) {
       return {false, false, 0, 0};
