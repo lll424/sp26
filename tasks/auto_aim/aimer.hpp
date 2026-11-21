@@ -69,6 +69,11 @@ private:
   // 把偶发跳变摊平；目标在动时直接跟随，不引入滞后。
   double z_lp_ = 0.0;
   bool has_z_lp_ = false;
+  // 静止判定的迟滞状态（2026-11-21）
+  // 如果只用单一阈值，目标速度刚好在阈值附近时会在「静止/运动」之间反复切换，
+  // 导致 vz_filtered 在 0 和真实值之间跳、z_lp 在滞后值和实时值之间跳，
+  // 反而制造出新的抖动。进用 0.2、出用 0.3，留 0.1 的死区。
+  bool was_static_ = false;
 
   AimPoint choose_aim_point(const Target & target);
 };

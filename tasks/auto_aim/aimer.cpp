@@ -59,7 +59,8 @@ io::Command Aimer::aim(
   //   ③ 一阶低通：目标在动时，把快变的观测噪声和慢变的真实运动分开
   constexpr double VZ_LIMIT = 0.8;      // m/s，车体垂直运动的物理上限
   constexpr double VZ_TAU = 0.05;       // s，低通时间常数
-  constexpr double STATIC_SPEED = 0.2;  // m/s，低于此值视为静止目标
+  constexpr double STATIC_SPEED = 0.2;  // m/s，进入静止的阈值
+  constexpr double MOVING_SPEED = 0.3;  // m/s，退出静止的阈值（迟滞）
 
   double vz_raw = std::clamp(ekf_x_before[5], -VZ_LIMIT, VZ_LIMIT);
 
@@ -67,9 +68,16 @@ io::Command Aimer::aim(
   // 如果连 vz 一起算进来，单个观测尖峰（限幅后仍有 0.8）就会让判定变成"在动"，
   // 于是尖峰又进了滤波器 —— 那就白判了。而 RM 赛场上不存在"水平静止、垂直高速"
   // 的目标，所以只用 vx/vy 判断是安全的。
+  //
+  // 双阈值迟滞：已经静止就用 0.3 才退出，还没静止就用 0.2 才进入。
+  // 单阈值会让速度刚好在 0.2 附近的目标在两种模式间反复切换，
+  // 导致 vz_filtered 在 0 和真实值之间跳，反而制造新的抖动。
   const double vx_b = ekf_x_before[1], vy_b = ekf_x_before[3];
   const double speed2 = vx_b * vx_b + vy_b * vy_b;
-  const bool is_static = speed2 < STATIC_SPEED * STATIC_SPEED;
+  const double enter2 = STATIC_SPEED * STATIC_SPEED;
+  const double exit2 = MOVING_SPEED * MOVING_SPEED;
+  const bool is_static = was_static_ ? (speed2 < exit2) : (speed2 < enter2);
+  was_static_ = is_static;
 
   auto now_tp = std::chrono::steady_clock::now();
   const double dt_f = has_last_aim_time_ ? tools::delta_time(now_tp, last_aim_time_) : 0.0;
