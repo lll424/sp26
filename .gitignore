@@ -15,3 +15,7 @@ records_24/
 records_25/
 __pycache__/
 *.pyc
+# 临时调试产物（视频抽帧、脚本输出等），不要提交
+.tmp_frames/
+.tmp_test/
+.git/CM_TMP

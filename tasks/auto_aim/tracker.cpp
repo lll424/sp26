@@ -28,6 +28,13 @@ Tracker::Tracker(const std::string & config_path, Solver & solver)
   // 用途：测试环境只有 1 块装甲板时，4 板模型会预测出 3 块幻影板，
   // 且 id 会在 0~3 之间乱跳（jumped 恒为真），a 被来回拽，w 完全不可信。
   single_armor_test_ = yaml["single_armor_test"] ? yaml["single_armor_test"].as<bool>() : false;
+
+  // 1、3 号板相对 0、2 号板的半径差 / 高度差（米），可选配置，缺省 0。
+  // 为什么从配置给：单块板可见时 id 永远停在 0，l/h 的雅可比列恒为 0，
+  // 滤波器没有观测通道去估计它们（实测 sigma 一直是 0）。
+  // 这两个量本质是车体的几何常数，用卷尺量出来填比让滤波��硬猜可靠。
+  armor_l_ = yaml["armor_l"] ? yaml["armor_l"].as<double>() : 0.0;
+  armor_h_ = yaml["armor_h"] ? yaml["armor_h"].as<double>() : 0.0;
 }
 
 std::string Tracker::state() const { return state_; }
@@ -286,8 +293,15 @@ bool Tracker::set_target(std::list<Armor> & armors, std::chrono::steady_clock::t
     //
     //   σ=10cm 的理由：3σ = ±30cm，覆盖矩形车体的半径差与常见高度差，
     //   同时挡住 1 米级的失控漂移。
+    //
+    // 2026-11-21 补充：l 和 h 允许从配置直接给定实测值。
+    //   单板为主的场景下 id 永远停在 0，l/h 的雅可比列恒为 0，
+    //   滤波器根本没有观测通道去学它们（实测 l/h 的 sigma 一直是 0）。
+    //   与其指望它自己学，不如量出来直接填。
+    //   配置项：armor_l / armor_h，单位米，缺省 0。
     Eigen::VectorXd P0_dig{{1, 64, 1, 64, 1, 64, 0.4, 100, 1e-4, 1e-2, 1e-2}};
-    target_ = Target(armor, t, 0.3, single_armor_test_ ? 1 : 4, P0_dig);
+    target_ = Target(
+      armor, t, 0.3, single_armor_test_ ? 1 : 4, P0_dig, armor_l_, armor_h_);
     if (single_armor_test_)
       tools::logger()->warn("[Tracker] single_armor_test 开启：按 1 块装甲板建模（仅供联调）");
   }
