@@ -16,6 +16,10 @@ struct AimPoint
 {
   bool valid;
   Eigen::Vector4d xyza;
+  // 这个瞄准点对应的槽位号（-1 = 未知）。
+  // 有了它才能把高度还原成「中心高度 + 该槽位的 h」，
+  // 从而彻底摆脱 predict 里 vz*dt 的污染。
+  int id = -1;
 };
 
 class Aimer
