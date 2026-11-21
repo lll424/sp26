@@ -38,23 +38,47 @@ io::Command Aimer::aim(
   auto target = targets.front();
 
   // 高度锚点：在【任何 predict 之前】给 EKF 状态拍个快照（2026-11-21）
-  // 装甲板高度在实战中几乎不变（车不跳、平地不上下），所以 vz 的非零值
-  // 基本都是观测噪声（装甲板只有 56mm 高，垂直方向像素少）。
-  // 一旦允许 predict 用 vz 推高度，会形成正反馈：
+  // 为什么不用 predict 出来的 z：那一步是 z += vz*dt，而 vz 的观测噪声
+  // （装甲板只有 56mm 高，垂直方向像素少）峰值能到 1.5m/s，比真实垂直运动还大。
+  // 一旦直接用它，会形成正反馈：
   //   z 偏 -> pitch 变大 -> fly_time 变长 -> 下一次 predict 的 dt 更大 -> z 更偏
   // 实测 aim_z 的 sigma 只有 1cm，峰峰值却有 38cm，而 EKF 的 z 只跳 1mm。
+  // 所以 z 的基数一律取预测前的值，垂直提前量单独用滤波后的 vz 补（见下）。
   const Eigen::VectorXd ekf_x_before = target.ekf_x();
   const double z_anchor = ekf_x_before[4];
   const double h_anchor = ekf_x_before[10];
 
-  // 高度还原：瞄准点的 z 只由「预测前的中心高度 + 该槽位的 h」决定。
-  //   0/2 号板 -> z = 中心
-  //   1/3 号板 -> z = 中心 + h
-  // 完全不用 predict 推出来的 z，所以静止目标时红框绝对不动。
-  auto restore_z = [&](AimPoint & ap) {
+  // vz 的噪声处理（2026-11-21）
+  // 观测噪声峰值能到 1.5m/s，比真实垂直运动（通常 <0.3m/s）还大。
+  // 先用物理上限限幅去掉不可能的尖峰，再做一阶低通：
+  //   真实的上下坡/颠簸是慢变（<2Hz），观测噪声是快变，低通能把它们分开。
+  // 时间常数 50ms，比子弹飞行时间（约 100ms）短，不会明显削弱提前量。
+  constexpr double VZ_LIMIT = 0.8;   // m/s，车体垂直运动的物理上限
+  constexpr double VZ_TAU = 0.05;    // s，低通时间常数
+  double vz_raw = std::clamp(ekf_x_before[5], -VZ_LIMIT, VZ_LIMIT);
+
+  auto now_tp = std::chrono::steady_clock::now();
+  if (has_last_aim_time_) {
+    double dt_f = tools::delta_time(now_tp, last_aim_time_);
+    if (dt_f > 1e-4 && dt_f < 0.5) {  // 间隔异常（重启/卡顿）时跳过，避免跳变
+      double alpha = dt_f / (VZ_TAU + dt_f);
+      vz_filtered_ += alpha * (vz_raw - vz_filtered_);
+    }
+  } else {
+    vz_filtered_ = vz_raw;  // 首帧直接取原值
+  }
+  last_aim_time_ = now_tp;
+  has_last_aim_time_ = true;
+
+  // 高度还原 + 垂直提前量：z = 预测前的中心高度(+h) + 滤波后的 vz × 飞行时间
+  //   0/2 号板 -> 基数 = 中心
+  //   1/3 号板 -> 基数 = 中心 + h
+  // 用预测前的 x[4] 当基数，避免把观测噪声引进来的 z 当基准（那会自证）。
+  auto restore_z = [&](AimPoint & ap, double fly_time) {
     if (!ap.valid || ap.id < 0) return;
     const bool use_h = (ap.id == 1 || ap.id == 3);
-    ap.xyza[2] = z_anchor + (use_h ? h_anchor : 0.0);
+    const double ft = std::min(fly_time, 0.5);  // 防止迭代里飞时长发散
+    ap.xyza[2] = z_anchor + (use_h ? h_anchor : 0.0) + vz_filtered_ * ft;
   };
 
   auto ekf = target.ekf();
@@ -80,7 +104,7 @@ io::Command Aimer::aim(
   }
 
   auto aim_point0 = choose_aim_point(target);
-  restore_z(aim_point0);
+  restore_z(aim_point0, 0.0);  // 首帧还没有飞时长，先不加垂直提前量
   debug_aim_point = aim_point0;
   if (!aim_point0.valid) {
     // tools::logger()->debug("Invalid aim_point0.");
@@ -110,7 +134,7 @@ io::Command Aimer::aim(
 
     // 计算瞄准点
     auto aim_point = choose_aim_point(iteration_target[iter]);
-    restore_z(aim_point);
+    restore_z(aim_point, prev_fly_time);
     debug_aim_point = aim_point;
     if (!aim_point.valid) {
       return {false, false, 0, 0};

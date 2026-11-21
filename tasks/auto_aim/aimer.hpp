@@ -53,6 +53,16 @@ private:
   double last_pitch_ = 0.0;
   bool has_last_cmd_ = false;
 
+  // 垂直速度的低通滤波状态（2026-11-21）
+  // vz 的观测噪声（装甲板只有 56mm 高，垂直方向像素少）峰值 1.5m/s，
+  // 比真实垂直运动（通常 <0.3m/s）还大。直接用它算垂直提前量会把
+  // 噪声经「z偏→pitch大→飞时长→z更偏」的正反馈放大成几十厘米。
+  // 但不能干脆不用 —— 垂直提前量是自瞄的必要功能。
+  // 解法：限幅去掉物理上不可能的尖峰，再做一阶低通把快变噪声和慢变运动分开。
+  double vz_filtered_ = 0.0;
+  std::chrono::steady_clock::time_point last_aim_time_;
+  bool has_last_aim_time_ = false;
+
   AimPoint choose_aim_point(const Target & target);
 };
 
