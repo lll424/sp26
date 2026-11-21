@@ -50,15 +50,32 @@ io::Command Aimer::aim(
 
   // vz 的噪声处理（2026-11-21）
   // 观测噪声峰值能到 1.5m/s，比真实垂直运动（通常 <0.3m/s）还大。
-  // 先用物理上限限幅去掉不可能的尖峰，再做一阶低通：
-  //   真实的上下坡/颠簸是慢变（<2Hz），观测噪声是快变，低通能把它们分开。
-  // 时间常数 50ms，比子弹飞行时间（约 100ms）短，不会明显削弱提前量。
-  constexpr double VZ_LIMIT = 0.8;   // m/s，车体垂直运动的物理上限
-  constexpr double VZ_TAU = 0.05;    // s，低通时间常数
+  // 三层处理：
+  //   ① 限幅：去掉物理上不可能的尖峰
+  //   ② 静止判定：整体速度很小时，垂直提前量直接归零
+  //      —— 静止目标本来就不需要提前量，此时 vz 的任何非零值都是噪声。
+  //         实测低通后仍有 0.28m/s 残留，乘 fly_time 后是 2.8cm 抖动
+  //         （在原图上约 33 像素，肉眼明显）。这一层把它彻底清零。
+  //   ③ 一阶低通：目标在动时，把快变的观测噪声和慢变的真实运动分开
+  constexpr double VZ_LIMIT = 0.8;      // m/s，车体垂直运动的物理上限
+  constexpr double VZ_TAU = 0.05;       // s，低通时间常数
+  constexpr double STATIC_SPEED = 0.2;  // m/s，低于此值视为静止目标
+
   double vz_raw = std::clamp(ekf_x_before[5], -VZ_LIMIT, VZ_LIMIT);
 
+  // 静止判定只看水平速度：
+  // 如果连 vz 一起算进来，单个观测尖峰（限幅后仍有 0.8）就会让判定变成"在动"，
+  // 于是尖峰又进了滤波器 —— 那就白判了。而 RM 赛场上不存在"水平静止、垂直高速"
+  // 的目标，所以只用 vx/vy 判断是安全的。
+  const double vx_b = ekf_x_before[1], vy_b = ekf_x_before[3];
+  const double speed2 = vx_b * vx_b + vy_b * vy_b;
+  const bool is_static = speed2 < STATIC_SPEED * STATIC_SPEED;
+
   auto now_tp = std::chrono::steady_clock::now();
-  if (has_last_aim_time_) {
+  if (is_static) {
+    // 静止：直接清零，红框绝对不动
+    vz_filtered_ = 0.0;
+  } else if (has_last_aim_time_) {
     double dt_f = tools::delta_time(now_tp, last_aim_time_);
     if (dt_f > 1e-4 && dt_f < 0.5) {  // 间隔异常（重启/卡顿）时跳过，避免跳变
       double alpha = dt_f / (VZ_TAU + dt_f);
