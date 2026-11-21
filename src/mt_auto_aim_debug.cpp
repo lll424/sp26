@@ -125,11 +125,26 @@ int main(int argc, char * argv[])
       auto target = targets.front();
 
       // 当前帧target更新后
+      // 诊断用：把 4 个预测槽位的 id 标出来，并高亮本帧实际匹配上的那个
+      //   黄色框 = last_id，这一块是靠观测直接定出来的，它准不准反映标定质量
+      //   绿色框 = 其他槽位，是模型按 r / 角度间隔推出来的，它准不准反映结构参数
+      // 这样一眼就能分清"标定问题"和"模型参数问题"
       std::vector<Eigen::Vector4d> armor_xyza_list = target.armor_xyza_list();
-      for (const Eigen::Vector4d & xyza : armor_xyza_list) {
+      const int matched_id = target.last_id;
+      for (size_t i = 0; i < armor_xyza_list.size(); i++) {
+        const Eigen::Vector4d & xyza = armor_xyza_list[i];
         auto image_points =
           solver.reproject_armor(xyza.head(3), xyza[3], target.armor_type, target.name);
-        tools::draw_points(img, image_points, {0, 255, 0});
+        const bool is_matched = (static_cast<int>(i) == matched_id);
+        const cv::Scalar color = is_matched ? cv::Scalar(0, 255, 255) : cv::Scalar(0, 255, 0);
+        tools::draw_points(img, image_points, color);
+
+        // 编号标在第一个角点（左上）上方
+        if (!image_points.empty()) {
+          cv::Point label_pos(
+            static_cast<int>(image_points[0].x), static_cast<int>(image_points[0].y) - 6);
+          tools::draw_text(img, std::to_string(i), label_pos, color, 0.6, 2);
+        }
       }
 
       // aimer瞄准位置
