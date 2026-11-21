@@ -157,6 +157,15 @@ int main(int argc, char * argv[])
       else
         tools::draw_points(img, image_points, {255, 0, 0});
 
+      // 瞄准点本身的状态，用于定位"pitch 抖动"的来源：
+      //   aim_z 稳、cmd_pitch 抖  -> 弹道解算/迭代的问题
+      //   aim_z 本身在跳          -> 瞄准点在换槽位，或位置被预测推偏
+      data["aim_valid"] = aim_point.valid ? 1 : 0;
+      data["aim_x"] = aim_xyza[0];
+      data["aim_y"] = aim_xyza[1];
+      data["aim_z"] = aim_xyza[2];
+      data["aim_a"] = aim_xyza[3] * 57.3;
+
       // 观测器内部数据
       Eigen::VectorXd x = target.ekf_x();
       data["x"] = x[0];

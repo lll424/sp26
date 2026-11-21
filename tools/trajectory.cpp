@@ -8,6 +8,15 @@ constexpr double g = 9.7833;
 
 Trajectory::Trajectory(const double v0, const double d, const double h)
 {
+  // 弹速异常保护（2026-11-21 加）
+  // v0 = 0 时 a = g*d²/(2v0²) 会变成 inf/nan，后面的 `if (delta < 0)` 对 nan
+  // 判为 false，会继续算出 nan 的 pitch；转成 int16 发到 CAN 就是任意值，
+  // 云台会暴冲。弹速没收到（cboard 初始值 0）或解析失败时都可能触发。
+  if (v0 < 1.0) {
+    unsolvable = true;
+    return;
+  }
+
   auto a = g * d * d / (2 * v0 * v0);
   auto b = -d;
   auto c = a + h;
