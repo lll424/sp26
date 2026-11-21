@@ -42,6 +42,13 @@ private:
   double low_speed_delay_time_;
   double decision_speed_;
 
+  // 输出限幅用的上一条指令（2026-11-21）
+  // 上游（EKF 预测、迭代弹道）偶发尖峰会让 yaw/pitch 瞬间跳十几度，
+  // 直接发到 CAN 就是让云台暴冲。这里兜一道底，保证指令连续。
+  double last_yaw_ = 0.0;
+  double last_pitch_ = 0.0;
+  bool has_last_cmd_ = false;
+
   AimPoint choose_aim_point(const Target & target);
 };
 

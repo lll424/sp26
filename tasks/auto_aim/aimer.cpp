@@ -95,6 +95,20 @@ io::Command Aimer::aim(
 
     // 计算新弹道
     Eigen::Vector3d xyz = aim_point.xyza.head(3);
+
+    // 发散检测（2026-11-21 加）
+    // 迭代里每轮都会 predict 到 future + fly_time，而 fly_time 又依赖上一轮的 pitch，
+    // 构成正反馈：z 偏 → pitch 变大 → fly_time 变长 → z 偏得更多。
+    // vz 的观测噪声（装甲板只有 56mm 高，垂直方向像素少、噪声大）经这个正反馈
+    // 会被放大到几十厘米。实测 aim_z 的 sigma 只有 1cm，峰峰值却有 38cm。
+    // 这里用首帧结果做锚：偏离超过 5cm 就判定发散，退回首帧，不再迭代。
+    constexpr double MAX_Z_DRIFT = 0.05;  // m
+    if (std::abs(xyz.z() - xyz0.z()) > MAX_Z_DRIFT) {
+      debug_aim_point = aim_point0;
+      current_traj = trajectory0;
+      break;
+    }
+
     double d = std::sqrt(xyz.x() * xyz.x() + xyz.y() * xyz.y());
     current_traj = tools::Trajectory(bullet_speed, d, xyz.z());
 
@@ -119,6 +133,23 @@ io::Command Aimer::aim(
   Eigen::Vector3d final_xyz = debug_aim_point.xyza.head(3);
   double yaw = std::atan2(final_xyz.y(), final_xyz.x()) + yaw_offset_;
   double pitch = -(current_traj.pitch + pitch_offset_);  //世界坐标系下pitch向上为负
+
+  // 输出限幅（2026-11-21 加）
+  // 上游偶发尖峰（EKF 预测被 vz 噪声推偏、迭代发散、跳板）会让 yaw/pitch
+  // 在一帧内跳十几度，直接发 CAN 就是云台暴冲。这里限制单次调用的最大变化量。
+  // 8°/次 × 90Hz = 720°/s，远超云台实际能力，正常跟踪完全不受影响；
+  // 只有真正的跳变会被削成几帧的平滑过渡。
+  constexpr double MAX_STEP = 8.0 / 57.3;  // rad
+  if (has_last_cmd_) {
+    double dyaw = tools::limit_rad(yaw - last_yaw_);
+    if (std::abs(dyaw) > MAX_STEP) yaw = last_yaw_ + (dyaw > 0 ? MAX_STEP : -MAX_STEP);
+    double dpitch = pitch - last_pitch_;
+    if (std::abs(dpitch) > MAX_STEP) pitch = last_pitch_ + (dpitch > 0 ? MAX_STEP : -MAX_STEP);
+  }
+  last_yaw_ = yaw;
+  last_pitch_ = pitch;
+  has_last_cmd_ = true;
+
   return {true, false, yaw, pitch};
 }
 
