@@ -165,6 +165,11 @@ int main(int argc, char * argv[])
       data["aim_y"] = aim_xyza[1];
       data["aim_z"] = aim_xyza[2];
       data["aim_a"] = aim_xyza[3] * 57.3;
+      // aim_id 在变 = 瞄准点在 4 个槽位之间切换，红框会横着跳
+      // jumped 一旦为 true 就永久保持，是"曾经切换过板"的历史标记；
+      //   它决定 choose_aim_point 走简单分支还是复杂选板逻辑
+      data["aim_id"] = aim_point.id;
+      data["jumped"] = target.jumped ? 1 : 0;
 
       // 观测器内部数据
       Eigen::VectorXd x = target.ekf_x();
