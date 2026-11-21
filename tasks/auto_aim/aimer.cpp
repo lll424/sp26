@@ -72,12 +72,35 @@ io::Command Aimer::aim(
   const bool is_static = speed2 < STATIC_SPEED * STATIC_SPEED;
 
   auto now_tp = std::chrono::steady_clock::now();
+  const double dt_f = has_last_aim_time_ ? tools::delta_time(now_tp, last_aim_time_) : 0.0;
+  const bool dt_ok = (dt_f > 1e-4 && dt_f < 0.5);  // 间隔异常（重启/卡顿）时跳过
+
+  // 静止时对中心高度做低通（2026-11-21）
+  // EKF 的 z 单帧观测精度约 1.5mm，实测峰峰却有 2.7cm（18 倍），
+  // 是偶发离群值（检测框抖动、tracker predict 里 vz 的残留污染）。
+  // 静止时目标高度物理上就是常数，所以用 0.2s 时间常数把它摊平；
+  // 目标在动时直接跟随 z_anchor，不引入任何滞后。
+  constexpr double Z_TAU = 0.2;  // s，只在静止时使用
+  double z_use = z_anchor;
   if (is_static) {
-    // 静止：直接清零，红框绝对不动
+    if (has_z_lp_ && dt_ok) {
+      const double a_z = dt_f / (Z_TAU + dt_f);
+      z_lp_ += a_z * (z_anchor - z_lp_);
+    } else {
+      z_lp_ = z_anchor;
+      has_z_lp_ = true;
+    }
+    z_use = z_lp_;
+  } else {
+    z_lp_ = z_anchor;  // 运动时直接跟随
+    has_z_lp_ = true;
+  }
+
+  if (is_static) {
+    // 静止：垂直提前量直接清零，红框绝对不动
     vz_filtered_ = 0.0;
   } else if (has_last_aim_time_) {
-    double dt_f = tools::delta_time(now_tp, last_aim_time_);
-    if (dt_f > 1e-4 && dt_f < 0.5) {  // 间隔异常（重启/卡顿）时跳过，避免跳变
+    if (dt_ok) {
       double alpha = dt_f / (VZ_TAU + dt_f);
       vz_filtered_ += alpha * (vz_raw - vz_filtered_);
     }
@@ -87,15 +110,15 @@ io::Command Aimer::aim(
   last_aim_time_ = now_tp;
   has_last_aim_time_ = true;
 
-  // 高度还原 + 垂直提前量：z = 预测前的中心高度(+h) + 滤波后的 vz × 飞行时间
+  // 高度还原 + 垂直提前量：z = 静止低通后的中心高度(+h) + 滤波后的 vz × 飞行时间
   //   0/2 号板 -> 基数 = 中心
   //   1/3 号板 -> 基数 = 中心 + h
-  // 用预测前的 x[4] 当基数，避免把观测噪声引进来的 z 当基准（那会自证）。
+  // 基数用预测前的 x[4]（静止时再过一层低通），避免把观测噪声引进来的 z 当基准（那会自证）。
   auto restore_z = [&](AimPoint & ap, double fly_time) {
     if (!ap.valid || ap.id < 0) return;
     const bool use_h = (ap.id == 1 || ap.id == 3);
     const double ft = std::min(fly_time, 0.5);  // 防止迭代里飞时长发散
-    ap.xyza[2] = z_anchor + (use_h ? h_anchor : 0.0) + vz_filtered_ * ft;
+    ap.xyza[2] = z_use + (use_h ? h_anchor : 0.0) + vz_filtered_ * ft;
   };
 
   auto ekf = target.ekf();

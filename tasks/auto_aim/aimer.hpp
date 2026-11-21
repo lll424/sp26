@@ -63,6 +63,13 @@ private:
   std::chrono::steady_clock::time_point last_aim_time_;
   bool has_last_aim_time_ = false;
 
+  // 静止时中心高度的低通状态（2026-11-21）
+  // EKF 的 z 单帧观测精度约 1.5mm，实测峰峰却有 2.7cm（18 倍），
+  // 说明有偶发离群值（检测框抖动等）。静止时对这个量做低通，
+  // 把偶发跳变摊平；目标在动时直接跟随，不引入滞后。
+  double z_lp_ = 0.0;
+  bool has_z_lp_ = false;
+
   AimPoint choose_aim_point(const Target & target);
 };
 
