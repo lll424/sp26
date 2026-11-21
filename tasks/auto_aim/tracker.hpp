@@ -39,10 +39,6 @@ private:
   int outpost_max_temp_lost_count_;
   int normal_temp_lost_count_;
   bool single_armor_test_;  // 调试：目标只有 1 块装甲板时，把模型按 1 板建模
-  // 1、3 号板相对 0、2 号板的半径差与高度差（米）。
-  // 单块板可见时这两个量不可观测，由配置直接给定实测值，缺省 0。
-  double armor_l_;
-  double armor_h_;
   std::string state_, pre_state_;
   Target target_;
   std::chrono::steady_clock::time_point last_timestamp_;

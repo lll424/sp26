@@ -81,12 +81,6 @@ min_detect_count: 5
 max_temp_lost_count: 25
 outpost_max_temp_lost_count: 75
 
-# 1、3 号板相对 0、2 号板的半径差 / 高度差（米）。缺省 0。
-# 单块板可见时滤波器学不到这两个量（id 停在 0，雅可比列恒为 0），
-# 必须用卷尺实测后填这里。说明见 mindvision_vm.yaml 同名注释。
-armor_l: 0.0
-armor_h: 0.0
-
 #####-----aimer参数-----#####
 yaw_offset: -0.8 # degree -2.5
 pitch_offset: -1  # degree 2

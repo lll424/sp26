@@ -24,12 +24,9 @@ public:
   int last_id;  // debug only
 
   Target() = default;
-  // l0 / h0：1、3 号板相对 0、2 号板的半径差与高度差（米），默认 0。
-  // 单块板可见时这两个量不可观测（只有 id=1/3 才用到它们），
-  // 所以支持从配置直接给定实测值，而不是指望滤波器自己学。
   Target(
     const Armor & armor, std::chrono::steady_clock::time_point t, double radius, int armor_num,
-    Eigen::VectorXd P0_dig, double l0 = 0.0, double h0 = 0.0);
+    Eigen::VectorXd P0_dig);
   Target(double x, double vyaw, double radius, double h);
 
   void predict(std::chrono::steady_clock::time_point t);

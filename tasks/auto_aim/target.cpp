@@ -9,7 +9,7 @@ namespace auto_aim
 {
 Target::Target(
   const Armor & armor, std::chrono::steady_clock::time_point t, double radius, int armor_num,
-  Eigen::VectorXd P0_dig, double l0, double h0)
+  Eigen::VectorXd P0_dig)
 : name(armor.name),
   armor_type(armor.type),
   jumped(false),
@@ -36,9 +36,7 @@ Target::Target(
   // w: angular velocity
   // l: r2 - r1
   // h: z2 - z1
-  // l0 / h0 由配置给定（实测值），因为单板可见时这两个量不可观测。
-  Eigen::VectorXd x0{
-    {center_x, 0, center_y, 0, center_z, 0, ypr[0], 0, r, l0, h0}};  //初始化预测量
+  Eigen::VectorXd x0{{center_x, 0, center_y, 0, center_z, 0, ypr[0], 0, r, 0, 0}};  //初始化预测量
   Eigen::MatrixXd P0 = P0_dig.asDiagonal();
 
   // 防止夹角求和出现异常值
